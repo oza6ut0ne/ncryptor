@@ -1,6 +1,6 @@
 [package]
 name = "ncryptor"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Ryota Okimatsu <oza6ut0ne@gmail.com>"]
 description = "Encrypt or decrypt files."
 license = "MIT OR Apache-2.0"
