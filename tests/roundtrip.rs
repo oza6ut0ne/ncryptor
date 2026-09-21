@@ -279,8 +279,6 @@ fn using_an_rsa_key_without_the_rsa_flag_is_reported() {
 
 #[test]
 fn x25519_key_files_use_the_expected_encoding() {
-    use std::os::unix::fs::PermissionsExt as _;
-
     let dir = TempDir::new().unwrap();
     let key = make_keypair(dir.path(), "cryptor", Algorithm::X25519, "");
     let public = public_of(&key);
@@ -313,14 +311,19 @@ fn x25519_key_files_use_the_expected_encoding() {
         ]
     );
 
-    for path in [&key, &public] {
-        let mode = std::fs::metadata(path).unwrap().permissions().mode();
-        assert_eq!(
-            mode & 0o077,
-            0,
-            "{} must not be group/world readable",
-            path.display()
-        );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        for path in [&key, &public] {
+            let mode = std::fs::metadata(path).unwrap().permissions().mode();
+            assert_eq!(
+                mode & 0o077,
+                0,
+                "{} must not be group/world readable",
+                path.display()
+            );
+        }
     }
 }
 

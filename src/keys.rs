@@ -2,6 +2,7 @@
 
 use std::fs::OpenOptions;
 use std::io::{BufRead, Write};
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Component, Path, PathBuf};
 
@@ -32,6 +33,7 @@ const PBKDF2_ITERATION_COUNT: u32 = 131_072;
 const SALT_BYTES: usize = 8;
 const IV_BYTES: usize = 16;
 
+#[cfg(unix)]
 const KEY_PERMISSION: u32 = 0o600;
 /// Prefer `NCRYPTOR_PASSPHRASE`, falling back to `CRYPTOR_PASSPHRASE`.
 const PASSPHRASE_ENV_VARS: [&str; 2] = ["NCRYPTOR_PASSPHRASE", "CRYPTOR_PASSPHRASE"];
@@ -394,13 +396,13 @@ pub fn confirm_key_paths(path: &Path) -> Result<Option<(PathBuf, PathBuf)>> {
     Ok(Some((private_path, public_path)))
 }
 
-/// Writes the file with mode 0600, applied only on creation.
+/// Writes the file with mode 0600 (Unix only), applied only on creation.
 pub fn write_key_file(path: &Path, contents: &[u8]) -> Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(KEY_PERMISSION)
+    let mut options = OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    options.mode(KEY_PERMISSION);
+    let mut file = options
         .open(path)
         .map_err(|e| format!("{}: {e}", path.display()))?;
     file.write_all(contents)?;
