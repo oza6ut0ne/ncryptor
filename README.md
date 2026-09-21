@@ -8,8 +8,10 @@ data) with public-key cryptography. It supports two schemes: X25519 with HPKE
 (RFC 9180) by default, or RSA-OAEP combined with AES-256-EAX. Plaintext is
 zlib-compressed before encryption, and output is base64 text by default, or
 raw binary with `-b`. Key pairs are stored as standard, optionally
-passphrase-protected PEM files, so they interoperate with other tools.
-Written in pure Rust with no C dependencies.
+passphrase-protected PEM files, so they interoperate with other tools. RSA
+keys can also be read from OpenSSH-formatted files (e.g. `ssh-keygen`
+output), passphrase-protected or not. Written in pure Rust with no C
+dependencies.
 
 ## Usage
 

@@ -1,4 +1,5 @@
-//! Key file I/O. Handles PEM/DER formats.
+//! Key file I/O. Handles PEM/DER formats, plus reading (but not writing) RSA
+//! keys in OpenSSH format.
 
 use std::fs::OpenOptions;
 use std::io::{BufRead, Write};
@@ -14,6 +15,7 @@ use pkcs8::der::{Decode as _, Encode as _};
 use pkcs8::pkcs5::pbes2::{EncryptionScheme, Kdf, Parameters, Pbkdf2Params, Pbkdf2Prf};
 use pkcs8::spki::{AlgorithmIdentifierRef, SubjectPublicKeyInfoRef};
 use pkcs8::{EncryptedPrivateKeyInfoRef, PrivateKeyInfoRef};
+use rsa::pkcs1::{EncodeRsaPrivateKey as _, EncodeRsaPublicKey as _};
 use rsa::rand_core::{OsRng, RngCore as _};
 use zeroize::Zeroizing;
 
@@ -43,6 +45,7 @@ const RSA_ENV_VARS: [&str; 2] = ["NCRYPTOR_RSA", "CRYPTOR_RSA"];
 const PEM_PRIVATE_KEY: &str = "PRIVATE KEY";
 const PEM_ENCRYPTED_PRIVATE_KEY: &str = "ENCRYPTED PRIVATE KEY";
 const PEM_RSA_PRIVATE_KEY: &str = "RSA PRIVATE KEY";
+const PEM_OPENSSH_PRIVATE_KEY: &str = "OPENSSH PRIVATE KEY";
 const PEM_PUBLIC_KEY: &str = "PUBLIC KEY";
 const PEM_RSA_PUBLIC_KEY: &str = "RSA PUBLIC KEY";
 
@@ -235,6 +238,7 @@ pub fn load_private_key(path: &Path, given_passphrase: Option<&str>) -> Result<P
                 decrypted.as_bytes().to_vec(),
             )))
         }
+        PEM_OPENSSH_PRIVATE_KEY => openssh_private_key_to_pkcs1(&pem.der, &path, given_passphrase),
         other => Err(format!("unsupported PEM block '{other}' in {}", path.display()).into()),
     }
 }
@@ -242,13 +246,79 @@ pub fn load_private_key(path: &Path, given_passphrase: Option<&str>) -> Result<P
 pub fn load_public_key(path: &Path) -> Result<PublicKeyDer> {
     let path = resolve_path(path);
     let data = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let pem = parse_pem(&data)?;
 
+    if let Ok(text) = std::str::from_utf8(&data) {
+        let trimmed = text.trim_start();
+        if !trimmed.is_empty() && !trimmed.starts_with("-----BEGIN") {
+            let line = trimmed.lines().next().unwrap_or("").trim();
+            return openssh_public_key_to_pkcs1(line, &path);
+        }
+    }
+
+    let pem = parse_pem(&data)?;
     match pem.label.as_str() {
         PEM_PUBLIC_KEY => Ok(PublicKeyDer::Spki(pem.der)),
         PEM_RSA_PUBLIC_KEY => Ok(PublicKeyDer::Pkcs1Rsa(pem.der)),
         other => Err(format!("unsupported PEM block '{other}' in {}", path.display()).into()),
     }
+}
+
+/// Converts an OpenSSH-formatted private key (the binary `openssh-key-v1`
+/// blob, i.e. the PEM body already base64-decoded) into PKCS#1 DER. Only RSA
+/// keys are supported.
+fn openssh_private_key_to_pkcs1(
+    bytes: &[u8],
+    path: &Path,
+    given_passphrase: Option<&str>,
+) -> Result<PrivateKeyDer> {
+    let key = ssh_key::private::PrivateKey::from_bytes(bytes)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let key = if key.is_encrypted() {
+        let passphrase = passphrase(given_passphrase)?;
+        key.decrypt(passphrase.as_bytes())
+            .map_err(|_| "could not decrypt the private key (wrong passphrase?)")?
+    } else {
+        key
+    };
+
+    let rsa_keypair = key
+        .key_data()
+        .rsa()
+        .ok_or("the OpenSSH private key does not hold an RSA key")?;
+    let rsa_private = rsa_private_key_from_ssh(rsa_keypair)
+        .map_err(|e| format!("could not convert the OpenSSH RSA key: {e}"))?;
+    let der = rsa_private.to_pkcs1_der()?;
+    Ok(PrivateKeyDer::Pkcs1Rsa(Zeroizing::new(
+        der.as_bytes().to_vec(),
+    )))
+}
+
+/// Converts an `ssh_key` RSA keypair into an `rsa` crate private key.
+///
+/// This does not use `ssh_key`'s own `TryFrom` conversion, which as of
+/// `ssh-key` 0.6.7 passes `p` twice instead of `p` and `q`.
+fn rsa_private_key_from_ssh(keypair: &ssh_key::private::RsaKeypair) -> Result<rsa::RsaPrivateKey> {
+    let n = rsa::BigUint::try_from(&keypair.public.n)?;
+    let e = rsa::BigUint::try_from(&keypair.public.e)?;
+    let d = rsa::BigUint::try_from(&keypair.private.d)?;
+    let p = rsa::BigUint::try_from(&keypair.private.p)?;
+    let q = rsa::BigUint::try_from(&keypair.private.q)?;
+    Ok(rsa::RsaPrivateKey::from_components(n, e, d, vec![p, q])?)
+}
+
+/// Converts an OpenSSH-formatted public key line (`ssh-rsa AAAA... comment`)
+/// into PKCS#1 DER. Only RSA keys are supported.
+fn openssh_public_key_to_pkcs1(line: &str, path: &Path) -> Result<PublicKeyDer> {
+    let key = ssh_key::public::PublicKey::from_openssh(line)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let rsa_public = key
+        .key_data()
+        .rsa()
+        .ok_or("the OpenSSH public key does not hold an RSA key")?;
+    let rsa_public = rsa::RsaPublicKey::try_from(rsa_public)
+        .map_err(|e| format!("could not convert the OpenSSH RSA key: {e}"))?;
+    let der = rsa_public.to_pkcs1_der()?;
+    Ok(PublicKeyDer::Pkcs1Rsa(der.as_bytes().to_vec()))
 }
 
 /// Extracts the 32-byte X25519 private key from a PKCS#8 `PrivateKeyInfo`.

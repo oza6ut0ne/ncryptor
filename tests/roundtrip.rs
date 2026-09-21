@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+use ncryptor::keys::PrivateKeyDer;
 use ncryptor::{Algorithm, codec, keys};
 use tempfile::TempDir;
 
@@ -361,6 +362,64 @@ fn the_public_key_path_replaces_the_last_extension() {
         keys::with_pub_suffix(Path::new("/tmp/a.tar.gz")),
         Path::new("/tmp/a.tar.pub")
     );
+}
+
+/// Builds an OpenSSH-formatted key pair (private + `.pub`) from the shared
+/// RSA key, optionally encrypted with a passphrase.
+fn openssh_rsa_keypair(dir: &Path, passphrase: Option<&str>) -> PathBuf {
+    use rsa::pkcs1::DecodeRsaPrivateKey as _;
+    use rsa::rand_core::OsRng;
+    use ssh_key::LineEnding;
+    use ssh_key::private::{KeypairData, PrivateKey, RsaKeypair};
+
+    let PrivateKeyDer::Pkcs1Rsa(der) = keys::load_private_key(shared_rsa_key(), None).unwrap()
+    else {
+        panic!("shared RSA key is expected to be PKCS#1");
+    };
+    let rsa_private = rsa::RsaPrivateKey::from_pkcs1_der(&der).unwrap();
+    let ssh_keypair = RsaKeypair::try_from(&rsa_private).unwrap();
+    let private_key = PrivateKey::new(KeypairData::Rsa(ssh_keypair), "test").unwrap();
+    let private_key = match passphrase {
+        Some(passphrase) => private_key.encrypt(&mut OsRng, passphrase).unwrap(),
+        None => private_key,
+    };
+
+    let private_path = dir.join("openssh_rsa");
+    let public_path = keys::with_pub_suffix(&private_path);
+    std::fs::write(
+        &private_path,
+        private_key.to_openssh(LineEnding::LF).unwrap().as_bytes(),
+    )
+    .unwrap();
+    std::fs::write(
+        &public_path,
+        private_key.public_key().to_openssh().unwrap(),
+    )
+    .unwrap();
+    private_path
+}
+
+#[test]
+fn rsa_openssh_format_roundtrip() {
+    let dir = TempDir::new().unwrap();
+    let key = openssh_rsa_keypair(dir.path(), None);
+    roundtrip(Algorithm::Rsa, &key, None);
+}
+
+#[test]
+fn rsa_openssh_format_roundtrip_with_passphrase() {
+    let dir = TempDir::new().unwrap();
+    let key = openssh_rsa_keypair(dir.path(), Some("s3cret"));
+    roundtrip(Algorithm::Rsa, &key, Some("s3cret"));
+}
+
+#[test]
+fn rsa_openssh_format_wrong_passphrase_is_rejected() {
+    let dir = TempDir::new().unwrap();
+    let key = openssh_rsa_keypair(dir.path(), Some("s3cret"));
+    let encrypted =
+        ncryptor::encrypt(b"hello", Algorithm::Rsa, &public_of(&key), true).unwrap();
+    assert!(ncryptor::decrypt(&encrypted, Algorithm::Rsa, &key, Some("wrong"), true).is_err());
 }
 
 fn pem_body(pem: &str) -> Vec<u8> {
