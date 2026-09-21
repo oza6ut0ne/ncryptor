@@ -1,11 +1,21 @@
 [package]
 name = "ncryptor"
 version = "0.1.0"
+authors = ["Ryota Okimatsu <oza6ut0ne@gmail.com>"]
+description = "Encrypt or decrypt files."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/oza6ut0ne/ncryptor"
 edition = "2024"
 
 [[bin]]
 name = "ncryptor"
 path = "src/main.rs"
+
+[profile.release]
+strip = "symbols"
+opt-level = 3
+lto = true
+codegen-units = 1
 
 [dependencies]
 aes = "0.9"
