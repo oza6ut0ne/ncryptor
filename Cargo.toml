@@ -1,0 +1,24 @@
+[package]
+name = "ncryptor"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "ncryptor"
+path = "src/main.rs"
+
+[dependencies]
+aes = "0.9"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+eax = "0.6"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+hpke = { version = "0.14", default-features = false, features = ["x25519", "aes", "hkdfsha2", "alloc", "getrandom"] }
+pkcs8 = { version = "0.11", features = ["encryption", "pem", "std"] }
+rpassword = "7"
+rsa = "0.9"
+sha1 = "0.10"
+zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"
