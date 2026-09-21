@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "ncryptor"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "aes 0.9.3",
  "base64",
