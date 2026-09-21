@@ -5,6 +5,7 @@ authors = ["Ryota Okimatsu <oza6ut0ne@gmail.com>"]
 description = "Encrypt or decrypt files."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/oza6ut0ne/ncryptor"
+categories = ["cryptography", "command-line-utilities"]
 edition = "2024"
 
 [[bin]]
