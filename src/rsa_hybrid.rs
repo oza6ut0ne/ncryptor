@@ -33,7 +33,14 @@ const PUBLIC_EXPONENT: u32 = 65537;
 
 pub fn encrypt(plaintext: &[u8], key_path: &Path) -> Result<Vec<u8>> {
     let public_key = load_public_key(key_path)?;
+    encrypt_with_key(plaintext, &public_key)
+}
 
+pub(crate) fn encrypt_from_der(plaintext: &[u8], der: PublicKeyDer) -> Result<Vec<u8>> {
+    encrypt_with_key(plaintext, &rsa_public_from_der(der)?)
+}
+
+fn encrypt_with_key(plaintext: &[u8], public_key: &RsaPublicKey) -> Result<Vec<u8>> {
     let mut session_key = Zeroizing::new([0u8; AES_KEY_BYTES]);
     let mut nonce = [0u8; NONCE_BYTES];
     OsRng.fill_bytes(&mut *session_key);
@@ -59,6 +66,14 @@ pub fn encrypt(plaintext: &[u8], key_path: &Path) -> Result<Vec<u8>> {
 
 pub fn decrypt(payload: &[u8], key_path: &Path, passphrase: Option<&str>) -> Result<Vec<u8>> {
     let private_key = load_private_key(key_path, passphrase)?;
+    decrypt_with_key(payload, private_key)
+}
+
+pub(crate) fn decrypt_from_der(payload: &[u8], der: PrivateKeyDer) -> Result<Vec<u8>> {
+    decrypt_with_key(payload, rsa_from_der(der)?)
+}
+
+fn decrypt_with_key(payload: &[u8], private_key: RsaPrivateKey) -> Result<Vec<u8>> {
     let key_bytes = private_key.size();
 
     let header = key_bytes + NONCE_BYTES + TAG_BYTES;
@@ -125,7 +140,11 @@ pub fn generate(bits: usize, passphrase: &str) -> Result<(Zeroizing<String>, Str
 }
 
 fn load_public_key(key_path: &Path) -> Result<RsaPublicKey> {
-    Ok(match keys::load_public_key(key_path)? {
+    rsa_public_from_der(keys::load_public_key(key_path)?)
+}
+
+fn rsa_public_from_der(der: PublicKeyDer) -> Result<RsaPublicKey> {
+    Ok(match der {
         PublicKeyDer::Spki(der) => {
             keys::check_algorithm(keys::spki_algorithm(&der)?, keys::RSA_OID)?;
             RsaPublicKey::from_public_key_der(&der)?
@@ -135,7 +154,11 @@ fn load_public_key(key_path: &Path) -> Result<RsaPublicKey> {
 }
 
 fn load_private_key(key_path: &Path, passphrase: Option<&str>) -> Result<RsaPrivateKey> {
-    Ok(match keys::load_private_key(key_path, passphrase)? {
+    rsa_from_der(keys::load_private_key(key_path, passphrase)?)
+}
+
+fn rsa_from_der(der: PrivateKeyDer) -> Result<RsaPrivateKey> {
+    Ok(match der {
         PrivateKeyDer::Pkcs8(der) => {
             keys::check_algorithm(keys::pkcs8_algorithm(&der)?, keys::RSA_OID)?;
             RsaPrivateKey::from_pkcs8_der(&der)?

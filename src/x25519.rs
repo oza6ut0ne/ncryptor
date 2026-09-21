@@ -28,12 +28,15 @@ const INFO: &[u8] = b"cryptor";
 pub const ENC_BYTES: usize = X25519_KEY_BYTES;
 
 pub fn encrypt(plaintext: &[u8], key_path: &Path) -> Result<Vec<u8>> {
-    let public_key = match keys::load_public_key(key_path)? {
-        PublicKeyDer::Spki(der) => keys::x25519_public_from_spki(&der)?,
-        PublicKeyDer::Pkcs1Rsa(_) => {
-            return Err("the key file holds an RSA public key; use --rsa".into());
-        }
-    };
+    let public_key = load_public_key(key_path)?;
+    seal(plaintext, public_key)
+}
+
+pub(crate) fn encrypt_from_der(plaintext: &[u8], der: PublicKeyDer) -> Result<Vec<u8>> {
+    seal(plaintext, public_from_der(der)?)
+}
+
+fn seal(plaintext: &[u8], public_key: [u8; X25519_KEY_BYTES]) -> Result<Vec<u8>> {
     let public_key = PublicKey::from_bytes(&public_key)?;
 
     let compressed = codec::zlib_compress(plaintext);
@@ -50,18 +53,41 @@ pub fn encrypt(plaintext: &[u8], key_path: &Path) -> Result<Vec<u8>> {
     Ok(payload)
 }
 
+fn load_public_key(key_path: &Path) -> Result<[u8; X25519_KEY_BYTES]> {
+    public_from_der(keys::load_public_key(key_path)?)
+}
+
+fn public_from_der(der: PublicKeyDer) -> Result<[u8; X25519_KEY_BYTES]> {
+    match der {
+        PublicKeyDer::Spki(der) => keys::x25519_public_from_spki(&der),
+        PublicKeyDer::Pkcs1Rsa(_) => Err("the key file holds an RSA public key; use --rsa".into()),
+    }
+}
+
 pub fn decrypt(payload: &[u8], key_path: &Path, passphrase: Option<&str>) -> Result<Vec<u8>> {
+    let (enc, ciphertext) = split_payload(payload)?;
+    let secret = load_private_key(key_path, passphrase)?;
+    open(enc, ciphertext, secret)
+}
+
+pub(crate) fn decrypt_from_der(payload: &[u8], der: PrivateKeyDer) -> Result<Vec<u8>> {
+    let (enc, ciphertext) = split_payload(payload)?;
+    let secret = secret_from_der(der)?;
+    open(enc, ciphertext, secret)
+}
+
+fn split_payload(payload: &[u8]) -> Result<(&[u8], &[u8])> {
     if payload.len() < ENC_BYTES {
         return Err("the encrypted message is too short to hold an encapsulated key".into());
     }
-    let (enc, ciphertext) = payload.split_at(ENC_BYTES);
+    Ok(payload.split_at(ENC_BYTES))
+}
 
-    let secret = match keys::load_private_key(key_path, passphrase)? {
-        PrivateKeyDer::Pkcs8(der) => keys::x25519_secret_from_pkcs8(&der)?,
-        PrivateKeyDer::Pkcs1Rsa(_) => {
-            return Err("the key file holds an RSA private key; use --rsa".into());
-        }
-    };
+fn open(
+    enc: &[u8],
+    ciphertext: &[u8],
+    secret: Zeroizing<[u8; X25519_KEY_BYTES]>,
+) -> Result<Vec<u8>> {
     let secret = PrivateKey::from_bytes(&*secret)?;
     let enc = EncappedKey::from_bytes(enc)?;
 
@@ -74,6 +100,20 @@ pub fn decrypt(payload: &[u8], key_path: &Path, passphrase: Option<&str>) -> Res
         b"",
     )?;
     codec::zlib_decompress(&compressed)
+}
+
+fn load_private_key(
+    key_path: &Path,
+    passphrase: Option<&str>,
+) -> Result<Zeroizing<[u8; X25519_KEY_BYTES]>> {
+    secret_from_der(keys::load_private_key(key_path, passphrase)?)
+}
+
+fn secret_from_der(der: PrivateKeyDer) -> Result<Zeroizing<[u8; X25519_KEY_BYTES]>> {
+    match der {
+        PrivateKeyDer::Pkcs8(der) => keys::x25519_secret_from_pkcs8(&der),
+        PrivateKeyDer::Pkcs1Rsa(_) => Err("the key file holds an RSA private key; use --rsa".into()),
+    }
 }
 
 /// Returns the private and public key PEMs.

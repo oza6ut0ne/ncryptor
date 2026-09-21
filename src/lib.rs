@@ -58,6 +58,44 @@ pub fn decrypt(
     }
 }
 
+/// Encrypts plaintext, detecting whether the key is RSA or X25519 from the
+/// key file itself rather than requiring the caller to know in advance.
+pub fn encrypt_auto(plaintext: &[u8], key_path: &Path, binary: bool) -> Result<Vec<u8>> {
+    let der = keys::load_public_key(key_path)?;
+    let payload = match keys::public_key_algorithm(&der)? {
+        Algorithm::X25519 => x25519::encrypt_from_der(plaintext, der)?,
+        Algorithm::Rsa => rsa_hybrid::encrypt_from_der(plaintext, der)?,
+    };
+
+    Ok(if binary {
+        payload
+    } else {
+        codec::encode_b64_mime(&payload)
+    })
+}
+
+/// Decrypts ciphertext, detecting whether the key is RSA or X25519 from the
+/// key file itself rather than requiring the caller to know in advance. The
+/// key is loaded exactly once, so a passphrase is prompted for at most once.
+pub fn decrypt_auto(
+    encrypted: &[u8],
+    key_path: &Path,
+    passphrase: Option<&str>,
+    binary: bool,
+) -> Result<Vec<u8>> {
+    let payload = if binary {
+        encrypted.to_vec()
+    } else {
+        codec::decode_b64_mime(encrypted)?
+    };
+
+    let der = keys::load_private_key(key_path, passphrase)?;
+    match keys::private_key_algorithm(&der)? {
+        Algorithm::X25519 => x25519::decrypt_from_der(&payload, der),
+        Algorithm::Rsa => rsa_hybrid::decrypt_from_der(&payload, der),
+    }
+}
+
 /// Writes out a key pair using an already-resolved passphrase (empty means
 /// an unencrypted key). Does not prompt for overwrite confirmation.
 pub fn generate_keypair(

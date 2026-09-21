@@ -84,6 +84,68 @@ fn rsa_roundtrip_with_passphrase() {
     roundtrip(Algorithm::Rsa, &key, Some("s3cret"));
 }
 
+/// Exercises the fully-automatic encrypt/decrypt path, where the algorithm
+/// is never passed in and must be detected from the key files themselves.
+fn roundtrip_fully_auto(private: &Path, passphrase: Option<&str>) {
+    let public = public_of(private);
+    for binary in [false, true] {
+        for payload in sample_payloads() {
+            let encrypted = ncryptor::encrypt_auto(&payload, &public, binary).unwrap();
+            let decrypted =
+                ncryptor::decrypt_auto(&encrypted, private, passphrase, binary).unwrap();
+            assert_eq!(decrypted, payload, "binary={binary} len={}", payload.len());
+        }
+    }
+}
+
+#[test]
+fn rsa_pkcs1_fully_auto_roundtrip() {
+    roundtrip_fully_auto(shared_rsa_key(), None);
+}
+
+#[test]
+fn rsa_pkcs8_with_passphrase_fully_auto_roundtrip() {
+    let dir = TempDir::new().unwrap();
+    let key = make_keypair(dir.path(), "cryptor", Algorithm::Rsa, "s3cret");
+    roundtrip_fully_auto(&key, Some("s3cret"));
+}
+
+#[test]
+fn x25519_fully_auto_roundtrip() {
+    let dir = TempDir::new().unwrap();
+    let key = make_keypair(dir.path(), "cryptor", Algorithm::X25519, "");
+    roundtrip_fully_auto(&key, None);
+}
+
+#[test]
+fn x25519_with_passphrase_fully_auto_roundtrip() {
+    let dir = TempDir::new().unwrap();
+    let key = make_keypair(dir.path(), "cryptor", Algorithm::X25519, "s3cret");
+    roundtrip_fully_auto(&key, Some("s3cret"));
+}
+
+#[test]
+fn rsa_openssh_format_fully_auto_roundtrip() {
+    let dir = TempDir::new().unwrap();
+    let key = openssh_rsa_keypair(dir.path(), None);
+    roundtrip_fully_auto(&key, None);
+}
+
+#[test]
+fn rsa_openssh_format_with_passphrase_fully_auto_roundtrip() {
+    let dir = TempDir::new().unwrap();
+    let key = openssh_rsa_keypair(dir.path(), Some("s3cret"));
+    roundtrip_fully_auto(&key, Some("s3cret"));
+}
+
+#[test]
+fn auto_decrypt_wrong_passphrase_is_rejected() {
+    let dir = TempDir::new().unwrap();
+    let key = make_keypair(dir.path(), "cryptor", Algorithm::X25519, "s3cret");
+    let encrypted = ncryptor::encrypt_auto(b"hello", &public_of(&key), true).unwrap();
+    assert!(ncryptor::decrypt_auto(&encrypted, &key, Some("wrong"), true).is_err());
+}
+
 #[test]
 fn base64_output_matches_encodebytes_layout() {
     let dir = TempDir::new().unwrap();

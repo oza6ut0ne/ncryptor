@@ -371,6 +371,32 @@ pub fn check_algorithm(found: ObjectIdentifier, expected: ObjectIdentifier) -> R
     })
 }
 
+/// Determines the algorithm of an already-loaded private key, so callers can
+/// pick RSA or X25519 without being told in advance.
+pub fn private_key_algorithm(der: &PrivateKeyDer) -> Result<crate::Algorithm> {
+    match der {
+        PrivateKeyDer::Pkcs1Rsa(_) => Ok(crate::Algorithm::Rsa),
+        PrivateKeyDer::Pkcs8(inner) => match pkcs8_algorithm(inner)? {
+            RSA_OID => Ok(crate::Algorithm::Rsa),
+            X25519_OID => Ok(crate::Algorithm::X25519),
+            other => Err(format!("unexpected key algorithm {other}").into()),
+        },
+    }
+}
+
+/// Determines the algorithm of an already-loaded public key, so callers can
+/// pick RSA or X25519 without being told in advance.
+pub fn public_key_algorithm(der: &PublicKeyDer) -> Result<crate::Algorithm> {
+    match der {
+        PublicKeyDer::Pkcs1Rsa(_) => Ok(crate::Algorithm::Rsa),
+        PublicKeyDer::Spki(inner) => match spki_algorithm(inner)? {
+            RSA_OID => Ok(crate::Algorithm::Rsa),
+            X25519_OID => Ok(crate::Algorithm::X25519),
+            other => Err(format!("unexpected key algorithm {other}").into()),
+        },
+    }
+}
+
 // --------------------------------------------------------------- Writing
 
 /// Assembles an X25519 private key into PKCS#8 DER.

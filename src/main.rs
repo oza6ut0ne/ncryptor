@@ -50,11 +50,13 @@ fn run() -> Result<()> {
         None => keys::default_private_key(),
     };
 
-    // If both `-e` and `-d` are given, encryption takes priority.
+    // If both `-e` and `-d` are given, encryption takes priority. Neither
+    // consults `--rsa`/the env var: the algorithm is always detected from
+    // the key file itself.
     let output = if args.encrypt {
-        ncryptor::encrypt(&input, algorithm, &key_path, args.binary)?
+        ncryptor::encrypt_auto(&input, &key_path, args.binary)?
     } else {
-        ncryptor::decrypt(&input, algorithm, &key_path, args.passphrase(), args.binary)?
+        ncryptor::decrypt_auto(&input, &key_path, args.passphrase(), args.binary)?
     };
 
     write_output(args.output(), &output)
