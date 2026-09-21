@@ -18,7 +18,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<()> {
     let args = Cli::parse();
-    let algorithm = if args.rsa {
+    let algorithm = if args.rsa || keys::rsa_from_env() {
         Algorithm::Rsa
     } else {
         Algorithm::X25519

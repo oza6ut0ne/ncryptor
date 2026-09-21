@@ -35,6 +35,8 @@ const IV_BYTES: usize = 16;
 const KEY_PERMISSION: u32 = 0o600;
 /// Prefer `NCRYPTOR_PASSPHRASE`, falling back to `CRYPTOR_PASSPHRASE`.
 const PASSPHRASE_ENV_VARS: [&str; 2] = ["NCRYPTOR_PASSPHRASE", "CRYPTOR_PASSPHRASE"];
+/// Prefer `NCRYPTOR_RSA`, falling back to `CRYPTOR_RSA`.
+const RSA_ENV_VARS: [&str; 2] = ["NCRYPTOR_RSA", "CRYPTOR_RSA"];
 
 const PEM_PRIVATE_KEY: &str = "PRIVATE KEY";
 const PEM_ENCRYPTED_PRIVATE_KEY: &str = "ENCRYPTED PRIVATE KEY";
@@ -130,6 +132,23 @@ pub fn passphrase(argument: Option<&str>) -> Result<Zeroizing<String>> {
         }
     }
     Ok(Zeroizing::new(prompt_passphrase()?))
+}
+
+/// Reports whether `NCRYPTOR_RSA` or `CRYPTOR_RSA` is set to a truthy value
+/// ("1", "true", "yes", or "on", case-insensitive), used as the default for
+/// `--rsa` when the flag itself is not given.
+pub fn rsa_from_env() -> bool {
+    RSA_ENV_VARS
+        .iter()
+        .filter_map(|var| std::env::var(var).ok())
+        .any(|value| is_truthy(&value))
+}
+
+fn is_truthy(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 /// Reads from the terminal first, falling back to stdin if no terminal is

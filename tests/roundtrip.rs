@@ -158,9 +158,9 @@ fn wrong_passphrase_is_rejected() {
     assert!(ncryptor::decrypt(&encrypted, Algorithm::X25519, &key, Some("wrong"), true).is_err());
 }
 
-/// `NCRYPTOR_PASSPHRASE` / `CRYPTOR_PASSPHRASE` mutate process-wide
-/// environment state, so these tests are serialized with a mutex to avoid
-/// racing other tests.
+/// Tests that read `NCRYPTOR_PASSPHRASE` / `CRYPTOR_PASSPHRASE` /
+/// `NCRYPTOR_RSA` / `CRYPTOR_RSA` mutate process-wide environment state, so
+/// they are serialized with a mutex to avoid racing other tests.
 fn env_var_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -208,6 +208,45 @@ fn passphrase_argument_takes_priority_over_both_env_vars() {
         std::env::remove_var("CRYPTOR_PASSPHRASE");
     }
     assert_eq!(result.unwrap().as_str(), "explicit");
+}
+
+#[test]
+fn rsa_from_env_recognizes_truthy_values() {
+    let _guard = env_var_lock().lock().unwrap();
+    for value in ["1", "true", "TRUE", "yes", "on"] {
+        unsafe {
+            std::env::set_var("NCRYPTOR_RSA", value);
+        }
+        assert!(keys::rsa_from_env(), "{value:?} should be truthy");
+    }
+    for value in ["0", "false", "no", "off", ""] {
+        unsafe {
+            std::env::set_var("NCRYPTOR_RSA", value);
+        }
+        assert!(!keys::rsa_from_env(), "{value:?} should be falsy");
+    }
+    unsafe {
+        std::env::remove_var("NCRYPTOR_RSA");
+    }
+    assert!(!keys::rsa_from_env(), "unset should be falsy");
+}
+
+#[test]
+fn rsa_from_env_prefers_ncryptor_rsa_over_cryptor_rsa() {
+    let _guard = env_var_lock().lock().unwrap();
+    unsafe {
+        std::env::set_var("NCRYPTOR_RSA", "0");
+        std::env::set_var("CRYPTOR_RSA", "1");
+    }
+    let result = keys::rsa_from_env();
+    unsafe {
+        std::env::remove_var("NCRYPTOR_RSA");
+        std::env::remove_var("CRYPTOR_RSA");
+    }
+    assert!(
+        result,
+        "CRYPTOR_RSA should still be checked when NCRYPTOR_RSA is falsy"
+    );
 }
 
 #[test]
