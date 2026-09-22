@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 #[derive(Debug, Parser)]
-#[command(name = "ncryptor", infer_long_args = true)]
+#[command(name = "ncryptor", version, infer_long_args = true)]
 pub struct Cli {
     #[arg(short, long)]
     pub encrypt: bool,
