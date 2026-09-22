@@ -41,6 +41,10 @@ const KEY_PERMISSION: u32 = 0o600;
 const PASSPHRASE_ENV_VARS: [&str; 2] = ["NCRYPTOR_PASSPHRASE", "CRYPTOR_PASSPHRASE"];
 /// Prefer `NCRYPTOR_RSA`, falling back to `CRYPTOR_RSA`.
 const RSA_ENV_VARS: [&str; 2] = ["NCRYPTOR_RSA", "CRYPTOR_RSA"];
+/// Prefer `NCRYPTOR_SYMMETRIC`, falling back to `CRYPTOR_SYMMETRIC`.
+const SYMMETRIC_ENV_VARS: [&str; 2] = ["NCRYPTOR_SYMMETRIC", "CRYPTOR_SYMMETRIC"];
+/// Prefer `NCRYPTOR_X25519`, falling back to `CRYPTOR_X25519`.
+const X25519_ENV_VARS: [&str; 2] = ["NCRYPTOR_X25519", "CRYPTOR_X25519"];
 
 const PEM_PRIVATE_KEY: &str = "PRIVATE KEY";
 const PEM_ENCRYPTED_PRIVATE_KEY: &str = "ENCRYPTED PRIVATE KEY";
@@ -144,6 +148,26 @@ pub fn passphrase(argument: Option<&str>) -> Result<Zeroizing<String>> {
 /// `--rsa` when the flag itself is not given.
 pub fn rsa_from_env() -> bool {
     RSA_ENV_VARS
+        .iter()
+        .filter_map(|var| std::env::var(var).ok())
+        .any(|value| is_truthy(&value))
+}
+
+/// Reports whether `NCRYPTOR_SYMMETRIC` or `CRYPTOR_SYMMETRIC` is set to a
+/// truthy value, used as the default for `--symmetric` when the flag itself
+/// is not given.
+pub fn symmetric_from_env() -> bool {
+    SYMMETRIC_ENV_VARS
+        .iter()
+        .filter_map(|var| std::env::var(var).ok())
+        .any(|value| is_truthy(&value))
+}
+
+/// Reports whether `NCRYPTOR_X25519` or `CRYPTOR_X25519` is set to a truthy
+/// value, used as the default for `--x25519` when the flag itself is not
+/// given.
+pub fn x25519_from_env() -> bool {
+    X25519_ENV_VARS
         .iter()
         .filter_map(|var| std::env::var(var).ok())
         .any(|value| is_truthy(&value))

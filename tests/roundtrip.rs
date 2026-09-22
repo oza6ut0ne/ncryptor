@@ -484,6 +484,26 @@ fn rsa_openssh_format_wrong_passphrase_is_rejected() {
     assert!(ncryptor::decrypt(&encrypted, Algorithm::Rsa, &key, Some("wrong"), true).is_err());
 }
 
+// PBKDF2 with 1,000,000 iterations is expensive, so these tests keep the
+// number of derivations small.
+
+#[test]
+fn symmetric_roundtrip() {
+    let plaintext = b"hello symmetric world";
+    for binary in [false, true] {
+        let encrypted = ncryptor::encrypt_symmetric(plaintext, "s3cret", binary).unwrap();
+        assert!(ncryptor::looks_symmetric(&encrypted, binary).unwrap());
+        let decrypted = ncryptor::decrypt_symmetric(&encrypted, "s3cret", binary).unwrap();
+        assert_eq!(decrypted, plaintext, "binary={binary}");
+    }
+}
+
+#[test]
+fn symmetric_wrong_passphrase_is_rejected() {
+    let encrypted = ncryptor::encrypt_symmetric(b"hello", "right", true).unwrap();
+    assert!(ncryptor::decrypt_symmetric(&encrypted, "wrong", true).is_err());
+}
+
 fn pem_body(pem: &str) -> Vec<u8> {
     use base64::Engine as _;
     let body: String = pem

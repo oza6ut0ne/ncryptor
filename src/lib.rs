@@ -5,6 +5,7 @@ pub mod cli;
 pub mod codec;
 pub mod keys;
 pub mod rsa_hybrid;
+pub mod symmetric;
 pub mod x25519;
 
 use std::path::Path;
@@ -18,8 +19,8 @@ pub enum Algorithm {
     Rsa,
 }
 
-/// Encrypts plaintext. If `binary` is false, returns output compatible with
-/// `base64.encodebytes`.
+/// Encrypts plaintext. If `binary` is false, returns 76-column,
+/// newline-terminated base64.
 pub fn encrypt(
     plaintext: &[u8],
     algorithm: Algorithm,
@@ -94,6 +95,40 @@ pub fn decrypt_auto(
         Algorithm::X25519 => x25519::decrypt_from_der(&payload, der),
         Algorithm::Rsa => rsa_hybrid::decrypt_from_der(&payload, der),
     }
+}
+
+/// Encrypts plaintext with a passphrase-derived key, no keypair involved. If
+/// `binary` is false, returns 76-column, newline-terminated base64.
+pub fn encrypt_symmetric(plaintext: &[u8], passphrase: &str, binary: bool) -> Result<Vec<u8>> {
+    let payload = symmetric::encrypt(plaintext, passphrase)?;
+    Ok(if binary {
+        payload
+    } else {
+        codec::encode_b64_mime(&payload)
+    })
+}
+
+/// Decrypts ciphertext produced by [`encrypt_symmetric`]. If `binary` is
+/// false, the input is treated as base64.
+pub fn decrypt_symmetric(encrypted: &[u8], passphrase: &str, binary: bool) -> Result<Vec<u8>> {
+    let payload = if binary {
+        encrypted.to_vec()
+    } else {
+        codec::decode_b64_mime(encrypted)?
+    };
+    symmetric::decrypt(&payload, passphrase)
+}
+
+/// Reports whether `input` looks like a symmetrically-encrypted message, used
+/// to auto-detect the algorithm on decrypt when no algorithm flag is given.
+/// If `binary` is false, the input is treated as base64.
+pub fn looks_symmetric(input: &[u8], binary: bool) -> Result<bool> {
+    let payload = if binary {
+        input.to_vec()
+    } else {
+        codec::decode_b64_mime(input)?
+    };
+    Ok(symmetric::is_symmetric_payload(&payload))
 }
 
 /// Writes out a key pair using an already-resolved passphrase (empty means

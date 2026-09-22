@@ -5,13 +5,14 @@
 
 Ncryptor is a command-line tool for encrypting and decrypting files (or piped
 data) with public-key cryptography. It supports two schemes: X25519 with HPKE
-(RFC 9180) by default, or RSA-OAEP combined with AES-256-EAX. Plaintext is
-zlib-compressed before encryption, and output is base64 text by default, or
-raw binary with `-b`. Key pairs are stored as standard, optionally
-passphrase-protected PEM files, so they interoperate with other tools. RSA
-keys can also be read from OpenSSH-formatted files (e.g. `ssh-keygen`
-output), passphrase-protected or not. Written in pure Rust with no C
-dependencies.
+(RFC 9180) by default, or RSA-OAEP combined with AES-256-EAX. A third,
+passphrase-only scheme (`-c`) is also available, using a PBKDF2-HMAC-SHA512
+derived key with AES-256-EAX and no keypair. Plaintext is zlib-compressed
+before encryption, and output is base64 text by default, or raw binary with
+`-b`. Key pairs are stored as standard, optionally passphrase-protected PEM
+files, so they interoperate with other tools. RSA keys can also be read from
+OpenSSH-formatted files (e.g. `ssh-keygen` output), passphrase-protected or
+not. Written in pure Rust with no C dependencies.
 
 ## Usage
 
@@ -24,9 +25,11 @@ Arguments:
 Options:
   -e, --encrypt
   -d, --decrypt
+  -c, --symmetric
   -p, --passphrase <PASSPHRASE>
   -b, --binary
   -g, --generate-keys
+  -x, --x25519
   -r, --rsa
       --rsa-bits <RSA_BITS>      [default: 4096]
   -k, --key <KEY>

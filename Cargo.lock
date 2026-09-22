@@ -808,10 +808,12 @@ dependencies = [
  "eax",
  "flate2",
  "hpke",
+ "pbkdf2 0.12.2",
  "pkcs8 0.11.0",
  "rpassword",
  "rsa",
  "sha1",
+ "sha2 0.10.9",
  "ssh-key",
  "tempfile",
  "zeroize",
@@ -925,6 +927,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
 dependencies = [
  "digest 0.10.7",
+ "hmac 0.12.1",
 ]
 
 [[package]]

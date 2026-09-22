@@ -18,11 +18,10 @@ fn main() -> ExitCode {
 
 fn run() -> Result<()> {
     let args = Cli::parse();
-    let algorithm = if args.rsa || keys::rsa_from_env() {
-        Algorithm::Rsa
-    } else {
-        Algorithm::X25519
-    };
+    let rsa = args.rsa || keys::rsa_from_env();
+    let symmetric = args.symmetric || keys::symmetric_from_env();
+    let x25519 = args.x25519 || keys::x25519_from_env();
+    let algorithm = if rsa { Algorithm::Rsa } else { Algorithm::X25519 };
 
     if args.generate_keys {
         let path = args
@@ -38,25 +37,44 @@ fn run() -> Result<()> {
         );
     }
 
-    if !args.encrypt && !args.decrypt {
-        return Err("either --generate-keys or --encrypt or --decrypt must be set".into());
+    if !args.encrypt && !args.decrypt && !symmetric {
+        return Err(
+            "either --generate-keys or --encrypt or --decrypt or --symmetric must be set".into(),
+        );
     }
+    if args.encrypt && args.decrypt {
+        return Err("--encrypt and --decrypt cannot be used together".into());
+    }
+    // `-c` alone (without `-e`/`-d`) implies encryption.
+    let should_encrypt = args.encrypt || (symmetric && !args.decrypt);
 
     let input = read_input(args.input.as_deref())?;
 
-    let key_path = match &args.key {
-        Some(path) => path.clone(),
-        None if args.encrypt => keys::default_public_key(),
-        None => keys::default_private_key(),
-    };
-
-    // If both `-e` and `-d` are given, encryption takes priority. Neither
-    // consults `--rsa`/the env var: the algorithm is always detected from
-    // the key file itself.
-    let output = if args.encrypt {
-        ncryptor::encrypt_auto(&input, &key_path, args.binary)?
+    // Aside from `--symmetric`, neither `--rsa`/`--x25519`/the env vars are
+    // consulted here: the algorithm is always detected from the key file
+    // itself.
+    let output = if should_encrypt {
+        if symmetric {
+            let passphrase = keys::passphrase(args.passphrase())?;
+            ncryptor::encrypt_symmetric(&input, &passphrase, args.binary)?
+        } else {
+            let key_path = args.key.clone().unwrap_or_else(keys::default_public_key);
+            ncryptor::encrypt_auto(&input, &key_path, args.binary)?
+        }
     } else {
-        ncryptor::decrypt_auto(&input, &key_path, args.passphrase(), args.binary)?
+        // Only sniff the `SYM-` marker when the algorithm wasn't pinned
+        // explicitly; `--x25519` (like `--rsa`) opts out of the guess.
+        let use_symmetric = symmetric
+            || (!rsa
+                && !x25519
+                && ncryptor::looks_symmetric(&input, args.binary).unwrap_or(false));
+        if use_symmetric {
+            let passphrase = keys::passphrase(args.passphrase())?;
+            ncryptor::decrypt_symmetric(&input, &passphrase, args.binary)?
+        } else {
+            let key_path = args.key.clone().unwrap_or_else(keys::default_private_key);
+            ncryptor::decrypt_auto(&input, &key_path, args.passphrase(), args.binary)?
+        }
     };
 
     write_output(args.output(), &output)

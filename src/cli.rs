@@ -11,6 +11,9 @@ pub struct Cli {
     #[arg(short, long)]
     pub decrypt: bool,
 
+    #[arg(short = 'c', long)]
+    pub symmetric: bool,
+
     #[arg(short, long)]
     pub passphrase: Option<String>,
 
@@ -19,6 +22,9 @@ pub struct Cli {
 
     #[arg(short, long)]
     pub generate_keys: bool,
+
+    #[arg(short, long)]
+    pub x25519: bool,
 
     #[arg(short, long)]
     pub rsa: bool,
